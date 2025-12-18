@@ -1,0 +1,42 @@
+[
+    {
+        "file": "icici(1).pdf",
+        "bank": "ICICI",
+        "cardholder_name": "RAHUL SHARAN",
+        "card_last_4": "0003",
+        "total_amount_due": "19164.80",
+        "minimum_amount_due": "960.00"
+    },
+    {
+        "file": "icici(2).pdf",
+        "bank": "ICICI",
+        "cardholder_name": "RAHUL SHARAN",
+        "card_last_4": "0003",
+        "total_amount_due": "7370.63",
+        "minimum_amount_due": "370.00"
+    },
+    {
+        "file": "icici(3).pdf",
+        "bank": "ICICI",
+        "cardholder_name": "RAHUL SHARAN",
+        "card_last_4": "0003",
+        "total_amount_due": "2747.23",
+        "minimum_amount_due": "140.00"
+    },
+    {
+        "file": "indusind.pdf",
+        "bank": "INDUSIND",
+        "cardholder_name": "RAHUL SHARAN",
+        "card_last_4": "9782",
+        "total_amount_due": "2.00",
+        "minimum_amount_due": "2.00"
+    },
+    {
+        "file": "yesbank.pdf",
+        "bank": "YES BANK",
+        "cardholder_name": "",
+        "card_last_4": "2237",
+        "total_amount_due": "2492.80",
+        "minimum_amount_due": "2492.80"
+    }
+]
