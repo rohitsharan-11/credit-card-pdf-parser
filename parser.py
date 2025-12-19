@@ -5,10 +5,8 @@ import glob
 import pdfplumber
 from tkinter.simpledialog import askstring
 
-# -----------------------------
-# Detect Bank
-# -----------------------------
-def detect_bank(text):
+
+def detect_bank(text: str) -> str:
     t = text.lower()
     if "axis bank" in t:
         return "AXIS"
@@ -22,144 +20,175 @@ def detect_bank(text):
         return "ICICI"
     elif "hdfc" in t:
         return "HDFC"
-    else:
-        return "UNKNOWN"
+    return "UNKNOWN"
 
-# -----------------------------
-# Extract text from PDF (password-protected)
-# -----------------------------
-def extract_text(pdf_path, master_window, password=""):
+
+
+def extract_text(pdf_path, master_window=None, password=""):
     try:
         with pdfplumber.open(pdf_path, password=password) as pdf:
             text = ""
             for page in pdf.pages:
                 page_text = page.extract_text() or ""
-                page_text = re.sub(r'\s+', ' ', page_text)
+                page_text = re.sub(r"\s+", " ", page_text)
                 text += page_text + "\n"
             return text.strip()
+
     except Exception:
-        # Ask for password
-        password = askstring("Password Required", f"Enter password for {os.path.basename(pdf_path)}:", parent=master_window)
+        try:
+            password = askstring(
+                "Password Required",
+                f"Enter password for {os.path.basename(pdf_path)}:",
+                parent=master_window
+            )
+        except Exception as e:
+            print("Password dialog failed:", e)
+            return None
+
         if not password:
             return None
+
         try:
             with pdfplumber.open(pdf_path, password=password) as pdf:
                 text = ""
                 for page in pdf.pages:
                     page_text = page.extract_text() or ""
-                    page_text = re.sub(r'\s+', ' ', page_text)
+                    page_text = re.sub(r"\s+", " ", page_text)
                     text += page_text + "\n"
                 return text.strip()
-        except:
+        except Exception as e:
+            print("Wrong password or unreadable PDF:", e)
             return None
 
-# -----------------------------
-# Extract Cardholder Name
-# -----------------------------
+
+
 def extract_cardholder_name(text, bank):
     name = ""
+
     if bank == "YES BANK":
-        lines = text.split("\n")
-        for line in lines:
+        for line in text.split("\n"):
             line = line.strip()
-            # Skip lines with keywords / long sentences / numbers
-            if not line or any(k in line.lower() for k in ["click", "email", "form", "address", "mobile", "overview", "statement", "cid"]):
+            if not line:
+                continue
+            if any(
+                k in line.lower()
+                for k in ["email", "address", "mobile", "statement", "overview"]
+            ):
                 continue
             if any(c.isalpha() for c in line) and 2 < len(line) < 30:
                 name = line
                 break
     else:
-        match = re.search(r"\b(MR|MRS|MS)\.?\s+([A-Z][A-Z\s]*)(?:\s+[A-Z]?)?\b", text, re.IGNORECASE)
+        match = re.search(
+            r"\b(MR|MRS|MS)\.?\s+([A-Z][A-Z\s]+)\b",
+            text,
+            re.IGNORECASE
+        )
         if match:
             name = match.group(2).strip()
 
-    # Clean up roman numerals and extra spaces
-    name = re.sub(r"\b(I|II|III|IV|V)\b", "", name, flags=re.IGNORECASE).strip()
-    name = re.sub(r"\s{2,}", " ", name)
+    name = re.sub(r"\b(I|II|III|IV|V)\b", "", name)
+    name = re.sub(r"\s{2,}", " ", name).strip()
     return name
 
-# -----------------------------
-# Extract Card Last 4
-# -----------------------------
-def extract_card_last4(text):
-    match = re.search(r"(?:X|x|\*|\s){8,16}(\d{4})", text)
-    if match:
-        return match.group(1)
-    return ""
 
-# -----------------------------
-# Extract Amounts
-# -----------------------------
+def extract_card_last4_digits(text):
+    match = re.search(r"(?:X|\*|\s){6,16}(\d{4})", text)
+    return match.group(1) if match else ""
+
+
 def extract_total_due(text):
     match = re.search(
         r"(Total Amount Due|Total Due|Amount Due|Total Outstanding|Total Amount Payable)[^\d]*([\d,]+\.\d{2})",
-        text, re.IGNORECASE
+        text,
+        re.IGNORECASE
     )
-    if match:
-        return match.group(2).replace(",", "").strip()
-    return ""
+    return match.group(2).replace(",", "") if match else ""
 
-def extract_min_due(text):
+
+def extract_minimum_due(text):
     match = re.search(
         r"(Minimum Amount Due|Min Due|Minimum Payable)[^\d]*([\d,]+\.\d{2})",
-        text, re.IGNORECASE
+        text,
+        re.IGNORECASE
     )
-    if match:
-        return match.group(2).replace(",", "").strip()
-    return ""
+    return match.group(2).replace(",", "") if match else ""
 
-# -----------------------------
-# Extract details from PDF
-# -----------------------------
+
+
 def extract_details(text, pdf_path):
     bank = detect_bank(text)
+
     data = {
         "file": os.path.basename(pdf_path),
         "bank": bank,
         "cardholder_name": extract_cardholder_name(text, bank),
-        "card_last_4": extract_card_last4(text),
+        "card_last4_digits": extract_card_last4_digits(text),
         "total_amount_due": extract_total_due(text),
-        "minimum_amount_due": extract_min_due(text)
+        "minimum_amount_due": extract_minimum_due(text)
     }
 
-    # Fallback: check tables if amounts are empty
-    if not data["total_amount_due"] or not data["minimum_amount_due"]:
+    if bank == "INDUSIND":
+        data["minimum_amount_due"] = "NA"
+
+
+    if not data["total_amount_due"] or (
+        bank != "INDUSIND" and not data["minimum_amount_due"]
+    ):
         try:
             with pdfplumber.open(pdf_path) as pdf:
                 for page in pdf.pages:
-                    tables = page.extract_tables()
+                    tables = page.extract_tables() or []
                     for table in tables:
                         for row in table:
-                            row_text = ' '.join([str(cell) for cell in row if cell])
+                            row_text = " ".join(str(c) for c in row if c)
+
                             if not data["total_amount_due"]:
-                                match = re.search(r"(Total Amount Due|Total Due|Amount Due|Total Outstanding|Total Amount Payable)[^\d]*([\d,]+\.\d{2})", row_text, re.IGNORECASE)
-                                if match:
-                                    data["total_amount_due"] = match.group(2).replace(',', '').strip()
-                            if not data["minimum_amount_due"]:
-                                match = re.search(r"(Minimum Amount Due|Min Due|Minimum Payable)[^\d]*([\d,]+\.\d{2})", row_text, re.IGNORECASE)
-                                if match:
-                                    data["minimum_amount_due"] = match.group(2).replace(',', '').strip()
-        except:
-            pass
+                                m = re.search(
+                                    r"(Total Amount Due|Total Due|Amount Due)[^\d]*([\d,]+\.\d{2})",
+                                    row_text,
+                                    re.IGNORECASE
+                                )
+                                if m:
+                                    data["total_amount_due"] = m.group(2).replace(",", "")
+
+                            if bank != "INDUSIND" and not data["minimum_amount_due"]:
+                                m = re.search(
+                                    r"(Minimum Amount Due|Min Due)[^\d]*([\d,]+\.\d{2})",
+                                    row_text,
+                                    re.IGNORECASE
+                                )
+                                if m:
+                                    data["minimum_amount_due"] = m.group(2).replace(",", "")
+        except Exception as e:
+            print("Table extraction error:", e)
 
     return data
 
-# -----------------------------
-# Process folder
-# -----------------------------
-def process_folder(folder_path, master_window):
+
+# -------------------------------------------------
+# Process Folder & Save JSON
+# -------------------------------------------------
+def process_folder(folder_path, master_window=None):
     results = []
 
     for pdf_file in glob.glob(os.path.join(folder_path, "*.pdf")):
         text = extract_text(pdf_file, master_window)
-        if not text or len(text) < 20:
-            results.append({"file": os.path.basename(pdf_file), "error": "Could not read PDF or password missing"})
-            continue
-        details = extract_details(text, pdf_file)
-        results.append(details)
 
-    # Save JSON
-    with open("output.json", "w", encoding="utf-8") as f:
+        if not text or len(text) < 20:
+            results.append({
+                "file": os.path.basename(pdf_file),
+                "error": "Could not read PDF or password missing"
+            })
+            continue
+
+        results.append(extract_details(text, pdf_file))
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(base_dir, "output.json")
+
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=4)
 
+    print("JSON saved at:", output_path)
     return results

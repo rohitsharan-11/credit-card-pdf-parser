@@ -1,4 +1,4 @@
 __pycache__/
-*.pdf
+*statements.pdf
 output.json
 .env
